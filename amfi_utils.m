@@ -28,6 +28,13 @@ uint32_t read_magic(FILE* file, off_t offset) {
     return magic;
 }
 
+void *load_bytes(FILE *file, off_t offset, size_t size) {
+    void *buf = calloc(1, size);
+    fseek(file, offset, SEEK_SET);
+    fread(buf, size, 1, file);
+    return buf;
+}
+
 cpu_subtype_t get_cpusubtype() {
     host_basic_info_data_t basic_info;
     mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
@@ -40,7 +47,7 @@ cpu_subtype_t get_cpusubtype() {
 
 void getSHA256inplace(const uint8_t* code_dir, uint8_t *out) {
     if (code_dir == NULL) {
-        INFO("NULL passed to getSHA256inplace!");
+        printf("NULL passed to getSHA256inplace!\n");
         return;
     }
     uint32_t* code_dir_int = (uint32_t*)code_dir;
@@ -85,7 +92,7 @@ uint8_t *getCodeDirectory(const char* name) {
         arm64_index = 0; // If its only arm64 we don't care if it's arm64 or arm64e(should we check for intel 64?)
     }
     else if (magic == MH_MAGIC) {
-        ERROR("%s is 32bit. What are you doing here?", name);
+        printf("[-] %s is 32bit. What are you doing here?\n", name);
         fclose(fd);
         return NULL;
     }
@@ -98,7 +105,7 @@ uint8_t *getCodeDirectory(const char* name) {
         struct fat_arch *arch = (struct fat_arch *)load_bytes(fd, arch_off, (uint32_t)arch_size);
         
         int n = swap_uint32(fat->nfat_arch);
-        INFO("%s binary is FAT with %d architectures", name, n);
+        printf("[*] %s binary is FAT with %d architectures\n", name, n);
         
         while (n-- > 0) {
             magic = read_magic(fd, swap_uint32(arch->offset));
@@ -107,7 +114,7 @@ uint8_t *getCodeDirectory(const char* name) {
                 struct mach_header_64* mh64 = (struct mach_header_64*)load_bytes(fd, swap_uint32(arch->offset), sizeof(struct mach_header_64));
                 if (mh64->cputype == CPU_TYPE_ARM64) {
                     counter++;
-                    INFO("found arm64 variant");
+                    printf("[*] Found arm64\n");
                     file_off_array[counter] = swap_uint32(arch->offset);
                     off_array[counter] = swap_uint32(arch->offset) + sizeof(struct mach_header_64);
                     ncmds_array[counter] = mh64->ncmds;
@@ -117,7 +124,7 @@ uint8_t *getCodeDirectory(const char* name) {
                         arm64_index = counter;
                     }
                 } else {
-                    WARNING("The cpu type doesn't match with iphone, it's pc or watch binary");
+                    printf("[*] The cpu type doesn't match with iphone, it's pc or watch binary\n");
                 }
             }
             
@@ -126,13 +133,13 @@ uint8_t *getCodeDirectory(const char* name) {
         }
         
         if (counter == -1) { // by the end of the day there's no arm64 found
-            ERROR("No arm64? RIP");
+            printf("[-] No arm64? RIP\n");
             fclose(fd);
             return NULL;
         }
     }
     else {
-        ERROR("%s is not a macho! (or has foreign endianness?) (magic: %x)", name, magic);
+        printf("[-] %s is not a macho! (or has foreign endianness?) (magic: %x)\n", name, magic);
         fclose(fd);
         return NULL;
     }
@@ -152,7 +159,7 @@ uint8_t *getCodeDirectory(const char* name) {
             file_off = file_off_array[arm64_index];
             ncmds = ncmds_array[arm64_index];
         } else {
-            ERROR("This architecture is arm64e and there are neither arm64 or arm64e");
+            printf("[-] This architecture is arm64e and there are neither arm64 or arm64e\n");
             fclose(fd);
             return NULL;
         }
@@ -162,7 +169,7 @@ uint8_t *getCodeDirectory(const char* name) {
             file_off = file_off_array[arm64_index];
             ncmds = ncmds_array[arm64_index];
         } else {
-            ERROR("This architecture is arm64 and there are no arm64");
+            printf("[-] This architecture is arm64 and there are no arm64\n");
             fclose(fd);
             return NULL;
         }
